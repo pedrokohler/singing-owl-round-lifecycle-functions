@@ -13,10 +13,19 @@ export class FirebaseService {
     }
   }
 
-  get collection() {
-    const collectionName = this.configService.get('gcp.collection');
-    return admin.firestore().collection(`/${collectionName}`);
+  get groupsCollection() {
+    return admin.firestore().collection(`groups`);
   }
+
+  public getGroupReference = (id) => this.groupsCollection.doc(id);
+
+  public getCollectionReference = (collection) => (groupId) =>
+    this.getGroupReference(groupId).collection(collection);
+
+  public getDocReference = (collection) => (groupId, docId) =>
+    this.getCollectionReference(collection)(groupId).doc(docId);
+
+  public getRoundReference = this.getDocReference('rounds');
 
   private getCredential(): admin.AppOptions {
     if (this.environment === 'Development') return null;
