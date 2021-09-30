@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# $1 is the first argument and should be 2021-09-30-dump or the name of the folder of the most recent firestore dump
+
+npx firebase use song-ballot-95754
+npx gcloud config set project song-ballot-95754
+mkdir dumps
+npx gsutil -m cp -r gs://song-ballot-95754.appspot.com/$1 ./dumps

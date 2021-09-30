@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# $1 is the first argument and should be the name of the dump you want to create. If none is provided then the name is automatically created
+# as a date format such as 2021-09-30T09:35:13_45749
+
+npx firebase use song-ballot-95754
+npx gcloud config set project song-ballot-95754
+npx gcloud firestore export gs://song-ballot-95754.appspot.com/$1

@@ -9,8 +9,10 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "start": "npm run build && firebase emulators:start",
     "shell": "npm run build && firebase functions:shell",
-    "start:debug": "npm run build && firebase emulators:start --inspect-functions",
-    "logs": "firebase functions:log"
+    "start:debug": "npm run build && firebase emulators:start --inspect-functions --import ./dumps/2021-09-30-dump",
+    "logs": "firebase functions:log",
+    "create-dump": "./bin/create-dump",
+    "download-dump": "./bin/download-dump"
   },
   "engines": {
     "node": "14"

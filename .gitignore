@@ -30,4 +30,4 @@ node_modules/
 *.tgz
 .yarn-integrity
 .env
-
+dumps
