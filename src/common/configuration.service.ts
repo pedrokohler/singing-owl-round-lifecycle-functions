@@ -15,6 +15,12 @@ export class Configuration {
         loggingLevel: process.env.GCLOUD_LOGGING_MINIMUM_LEVEL || 'info',
         pubsub: {
           unixCrontabSchedule: process.env.UNIX_CRONTAB_SCHEDULE,
+          roundLifecycleControllerTopic:
+            process.env.GCLOUD_PUBSUB_TOPIC_ROUND_LIFECYCLE_CONTROLLER ||
+            'singing-owl-round-lifecycle-controller',
+          notificationQueueTopic:
+            process.env.GCLOUD_PUBSUB_TOPIC_NOTIFICATION_QUEUE ||
+            'singing-owl-notification-queue',
         },
       },
     });

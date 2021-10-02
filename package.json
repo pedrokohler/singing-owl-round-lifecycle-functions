@@ -1,6 +1,6 @@
 {
   "name": "singing-owl-round-lifecycle-watcher",
-  "description": "A cloud function watcher to control round lifecycle for the Song Ballot application",
+  "description": "A cloud function to watch round lifecycle periodically for the Song Ballot application",
   "author": "Pedro Kohler",
   "scripts": {
     "prebuild": "rimraf dist",

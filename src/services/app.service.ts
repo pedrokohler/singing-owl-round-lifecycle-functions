@@ -41,8 +41,8 @@ export class AppService {
       [
         'evaluationPeriodFinished',
         {
-          check: this.checkEvaluationPeriodFinished.bind(this),
-          action: this.evaluationPeriodFinishedAction.bind(this),
+          check: this.checkPeriodFinished(Stage.evaluation).bind(this),
+          action: this.periodFinishedAction(Stage.evaluation).bind(this),
         },
       ],
       [
@@ -75,8 +75,8 @@ export class AppService {
       [
         'submissionPeriodFinished',
         {
-          check: this.checkSubmissionPeriodFinished.bind(this),
-          action: this.submissionPeriodFinishedAction.bind(this),
+          check: this.checkPeriodFinished(Stage.submission).bind(this),
+          action: this.periodFinishedAction(Stage.submission).bind(this),
         },
       ],
       [
@@ -139,22 +139,22 @@ export class AppService {
     );
   }
 
-  private checkEvaluationPeriodFinished({ evaluationsEndAt }: ICheckArguments) {
-    const now = this.date.current.toMillis();
-    return now > evaluationsEndAt.toMillis();
-  }
-
-  private async evaluationPeriodFinishedAction({
-    groupId,
-    ongoingRoundId,
-  }): Promise<void> {
-    await this.updateNotifications({
-      groupId,
-      ongoingRoundId,
-      stage: Stage.evaluation,
-      hours: 0,
-    });
-    console.log('Finalizou evaluation');
+  private periodFinishedAction(stage: Stage) {
+    return async ({ groupId, ongoingRoundId }): Promise<void> => {
+      await this.updateNotifications({
+        groupId,
+        ongoingRoundId,
+        stage: stage,
+        hours: 0,
+      });
+      await this.firebase.publishMessageInTopic(
+        'gcp.pubsub.roundLifecycleControllerTopic',
+        {
+          groupId,
+          roundId: ongoingRoundId,
+        },
+      );
+    };
   }
 
   private checkPeriodAboutToFinish(hours, stage: Stage) {
@@ -174,7 +174,7 @@ export class AppService {
       }
 
       const timeLimit =
-        stage === 'evaluation' ? evaluationsEndAt : submissionsEndAt;
+        stage === Stage.evaluation ? evaluationsEndAt : submissionsEndAt;
       const now = this.date.current.toMillis();
       const hoursInMilliseconds = hours * 60 * 60 * 1000;
       return now > timeLimit.toMillis() - hoursInMilliseconds;
@@ -201,39 +201,36 @@ export class AppService {
         stage,
         hours,
       });
-      console.log('Sending', stage, 'notification', hours, 'hours');
+      await this.firebase.publishMessageInTopic(
+        'gcp.pubsub.notificationQueueTopic',
+        {
+          type: 'periodAboutToFinish',
+          params: {
+            hours,
+            stage,
+          },
+        },
+      );
     };
   }
 
-  private checkSubmissionPeriodFinished({
-    notifications,
-    submissionsEndAt,
-  }: ICheckArguments) {
-    if (
-      this.hasSameOrSubsequentNotificationBeenSent(
-        0,
-        Stage.submission,
-        notifications,
-      )
-    ) {
-      return false;
-    }
+  private checkPeriodFinished(stage: Stage) {
+    return ({
+      notifications,
+      submissionsEndAt,
+      evaluationsEndAt,
+    }: ICheckArguments) => {
+      if (
+        this.hasSameOrSubsequentNotificationBeenSent(0, stage, notifications)
+      ) {
+        return false;
+      }
 
-    const now = this.date.current.toMillis();
-    return now > submissionsEndAt.toMillis();
-  }
-
-  private async submissionPeriodFinishedAction({
-    groupId,
-    ongoingRoundId,
-  }): Promise<void> {
-    await this.updateNotifications({
-      groupId,
-      ongoingRoundId,
-      stage: Stage.submission,
-      hours: 0,
-    });
-    console.log('Finalizou submission');
+      const timeLimit =
+        stage === Stage.evaluation ? evaluationsEndAt : submissionsEndAt;
+      const now = this.date.current.toMillis();
+      return now > timeLimit.toMillis();
+    };
   }
 
   private async updateNotifications({ groupId, ongoingRoundId, stage, hours }) {
