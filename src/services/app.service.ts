@@ -1,15 +1,114 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { /* DateTimeService ,*/ FirebaseService } from '../common';
+import { firestore } from 'firebase-admin';
+import { DateTimeService, FirebaseService } from '../common';
+
+interface ICheckArguments {
+  notifications?: IGenericRegularObject<boolean>;
+  submissionsEndAt?: firestore.Timestamp;
+  evaluationsEndAt?: firestore.Timestamp;
+}
+
+interface IGenericRegularObject<T> {
+  [propName: string]: T;
+}
+
+interface IActionArguments {
+  groupId?: string;
+  ongoingRoundId?: string;
+}
+
+interface ICheckAction {
+  check: (args: ICheckArguments) => boolean;
+  action: (args: IActionArguments) => Promise<void>;
+}
+
+enum Stage {
+  evaluation = 'evaluation',
+  submission = 'submission',
+}
 
 @Injectable()
 export class AppService {
+  private readonly checkActionMap: Map<string, ICheckAction>;
+
   constructor(
+    private readonly date: DateTimeService,
     private readonly logger: Logger,
-    // private readonly date: DateTimeService,
     private readonly firebase: FirebaseService,
   ) {
     this.logger.setContext(AppService.name);
+    this.checkActionMap = new Map([
+      [
+        'evaluationPeriodFinished',
+        {
+          check: this.checkEvaluationPeriodFinished.bind(this),
+          action: this.evaluationPeriodFinishedAction.bind(this),
+        },
+      ],
+      [
+        'evaluationPeriodAboutToFinish(2)',
+        {
+          check: this.checkPeriodAboutToFinish(2, Stage.evaluation).bind(this),
+          action: this.periodAboutToFinishAction(2, Stage.evaluation).bind(
+            this,
+          ),
+        },
+      ],
+      [
+        'evaluationPeriodAboutToFinish(8)',
+        {
+          check: this.checkPeriodAboutToFinish(8, Stage.evaluation).bind(this),
+          action: this.periodAboutToFinishAction(8, Stage.evaluation).bind(
+            this,
+          ),
+        },
+      ],
+      [
+        'evaluationPeriodAboutToFinish(24)',
+        {
+          check: this.checkPeriodAboutToFinish(24, Stage.evaluation).bind(this),
+          action: this.periodAboutToFinishAction(24, Stage.evaluation).bind(
+            this,
+          ),
+        },
+      ],
+      [
+        'submissionPeriodFinished',
+        {
+          check: this.checkSubmissionPeriodFinished.bind(this),
+          action: this.submissionPeriodFinishedAction.bind(this),
+        },
+      ],
+      [
+        'submissionPeriodAboutToFinish(2)',
+        {
+          check: this.checkPeriodAboutToFinish(2, Stage.submission).bind(this),
+          action: this.periodAboutToFinishAction(2, Stage.submission).bind(
+            this,
+          ),
+        },
+      ],
+      [
+        'submissionPeriodAboutToFinish(8)',
+        {
+          check: this.checkPeriodAboutToFinish(8, Stage.submission).bind(this),
+          action: this.periodAboutToFinishAction(8, Stage.submission).bind(
+            this,
+          ),
+        },
+      ],
+      [
+        'submissionPeriodAboutToFinish(24)',
+        {
+          check: this.checkPeriodAboutToFinish(24, Stage.submission).bind(this),
+          action: this.periodAboutToFinishAction(24, Stage.submission).bind(
+            this,
+          ),
+        },
+      ],
+    ]);
   }
+
   async execute(): Promise<void> {
     const groupsCollection = await this.firebase.groupsCollection.get();
     await Promise.all(
@@ -19,10 +118,130 @@ export class AppService {
         const roundReference = await this.firebase
           .getRoundReference(groupId, ongoingRoundId)
           .get();
-        this.logger.log({
-          meta: roundReference.data(),
-        });
+        const { evaluationsEndAt, submissionsEndAt, notifications } =
+          roundReference.data();
+
+        for (const { check, action } of this.checkActionMap.values()) {
+          const result = check({
+            notifications,
+            submissionsEndAt,
+            evaluationsEndAt,
+          });
+          if (!result) {
+            continue;
+          }
+          return action({
+            groupId,
+            ongoingRoundId,
+          });
+        }
       }),
     );
   }
+
+  private checkEvaluationPeriodFinished({ evaluationsEndAt }: ICheckArguments) {
+    const now = this.date.current.toMillis();
+    return now > evaluationsEndAt.toMillis();
+  }
+
+  private async evaluationPeriodFinishedAction({
+    groupId,
+    ongoingRoundId,
+  }): Promise<void> {
+    await this.updateNotifications({
+      groupId,
+      ongoingRoundId,
+      stage: Stage.evaluation,
+      hours: 0,
+    });
+    console.log('Finalizou evaluation');
+  }
+
+  private checkPeriodAboutToFinish(hours, stage: Stage) {
+    return ({
+      notifications,
+      evaluationsEndAt,
+      submissionsEndAt,
+    }: ICheckArguments) => {
+      if (
+        this.hasSameOrSubsequentNotificationBeenSent(
+          hours,
+          stage,
+          notifications,
+        )
+      ) {
+        return false;
+      }
+
+      const timeLimit =
+        stage === 'evaluation' ? evaluationsEndAt : submissionsEndAt;
+      const now = this.date.current.toMillis();
+      const hoursInMilliseconds = hours * 60 * 60 * 1000;
+      return now > timeLimit.toMillis() - hoursInMilliseconds;
+    };
+  }
+
+  private hasSameOrSubsequentNotificationBeenSent(hours, stage, notifications) {
+    if (!notifications) {
+      return false;
+    }
+
+    const possibleHours = [24, 8, 2, 0];
+    const laterNotificationSent = possibleHours
+      .filter((hour) => hour <= hours)
+      .some((hour) => notifications[this.getNotificationTag(stage, hour)]);
+    return laterNotificationSent;
+  }
+
+  private periodAboutToFinishAction(hours, stage: Stage) {
+    return async ({ groupId, ongoingRoundId }: IActionArguments) => {
+      await this.updateNotifications({
+        groupId,
+        ongoingRoundId,
+        stage,
+        hours,
+      });
+      console.log('Sending', stage, 'notification', hours, 'hours');
+    };
+  }
+
+  private checkSubmissionPeriodFinished({
+    notifications,
+    submissionsEndAt,
+  }: ICheckArguments) {
+    if (
+      this.hasSameOrSubsequentNotificationBeenSent(
+        0,
+        Stage.submission,
+        notifications,
+      )
+    ) {
+      return false;
+    }
+
+    const now = this.date.current.toMillis();
+    return now > submissionsEndAt.toMillis();
+  }
+
+  private async submissionPeriodFinishedAction({
+    groupId,
+    ongoingRoundId,
+  }): Promise<void> {
+    await this.updateNotifications({
+      groupId,
+      ongoingRoundId,
+      stage: Stage.submission,
+      hours: 0,
+    });
+    console.log('Finalizou submission');
+  }
+
+  private async updateNotifications({ groupId, ongoingRoundId, stage, hours }) {
+    await this.firebase.getRoundReference(groupId, ongoingRoundId).update({
+      [`notifications.${this.getNotificationTag(stage, hours)}`]: true,
+    });
+  }
+
+  private getNotificationTag = (stage, hours) =>
+    `${stage.toLowerCase()}PeriodAboutToFinish:${hours}`;
 }
