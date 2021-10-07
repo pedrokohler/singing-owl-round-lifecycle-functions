@@ -4,6 +4,7 @@ import { DateTimeService, FirebaseService } from 'src/common';
 import { Stage } from 'src/enums/stage.enum';
 import ICheckAction from 'src/interfaces/check-action.interface';
 import IActionArguments from 'src/interfaces/action.interface';
+import IRound from 'src/interfaces/round.interface';
 
 @Injectable()
 export class AppService {
@@ -94,12 +95,12 @@ export class AppService {
     await Promise.all(
       groupsCollection.docs.map(async (groupDocument) => {
         const { id: groupId } = groupDocument;
-        const { ongoingRound: ongoingRoundId } = groupDocument.data();
-        const roundReference = await this.firebase
-          .getRoundReference(groupId, ongoingRoundId)
-          .get();
-        const { evaluationsEndAt, submissionsEndAt, notifications } =
-          roundReference.data();
+        const {
+          id: ongoingRoundId,
+          evaluationsEndAt,
+          submissionsEndAt,
+          notifications,
+        } = await this.getGroupOngoingRound(groupDocument);
 
         for (const { check, action } of this.checkActionMap.values()) {
           const result = check({
@@ -117,6 +118,21 @@ export class AppService {
         }
       }),
     );
+  }
+
+  private async getGroupOngoingRound(groupDocument): Promise<IRound> {
+    const { id: groupId } = groupDocument;
+    const { ongoingRound: ongoingRoundId } = groupDocument.data();
+    const roundReference = await this.firebase
+      .getRoundReference(groupId, ongoingRoundId)
+      .get();
+
+    const group = {
+      ...roundReference.data(),
+      id: roundReference.id,
+    } as IRound;
+
+    return group;
   }
 
   private async evaluationPeriodFinishedAction({
