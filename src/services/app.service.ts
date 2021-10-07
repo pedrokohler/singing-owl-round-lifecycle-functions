@@ -1,31 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { firestore } from 'firebase-admin';
-import { DateTimeService, FirebaseService } from '../common';
-
-interface ICheckArguments {
-  notifications?: IGenericRegularObject<boolean>;
-  submissionsEndAt?: firestore.Timestamp;
-  evaluationsEndAt?: firestore.Timestamp;
-}
-
-interface IGenericRegularObject<T> {
-  [propName: string]: T;
-}
-
-interface IActionArguments {
-  groupId?: string;
-  ongoingRoundId?: string;
-}
-
-interface ICheckAction {
-  check: (args: ICheckArguments) => boolean;
-  action: (args: IActionArguments) => Promise<void>;
-}
-
-enum Stage {
-  evaluation = 'evaluation',
-  submission = 'submission',
-}
+import ICheckArguments from 'src/interfaces/check-arguments.interface';
+import { DateTimeService, FirebaseService } from 'src/common';
+import { Stage } from 'src/enums/stage.enum';
+import ICheckAction from 'src/interfaces/check-action.interface';
+import IActionArguments from 'src/interfaces/action.interface';
 
 @Injectable()
 export class AppService {
