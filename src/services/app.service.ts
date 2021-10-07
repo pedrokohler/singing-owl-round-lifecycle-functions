@@ -39,10 +39,10 @@ export class AppService {
     this.logger.setContext(AppService.name);
     this.checkActionMap = new Map([
       [
-        'evaluationPeriodFinished',
+        'evaluationPeriodAboutToFinish(0)',
         {
-          check: this.checkPeriodFinished(Stage.evaluation).bind(this),
-          action: this.periodFinishedAction(Stage.evaluation).bind(this),
+          check: this.checkPeriodAboutToFinish(0, Stage.evaluation).bind(this),
+          action: this.evaluationPeriodFinishedAction.bind(this),
         },
       ],
       [
@@ -73,10 +73,12 @@ export class AppService {
         },
       ],
       [
-        'submissionPeriodFinished',
+        'submissionPeriodAboutToFinish(0)',
         {
-          check: this.checkPeriodFinished(Stage.submission).bind(this),
-          action: this.periodFinishedAction(Stage.submission).bind(this),
+          check: this.checkPeriodAboutToFinish(0, Stage.submission).bind(this),
+          action: this.periodAboutToFinishAction(0, Stage.submission).bind(
+            this,
+          ),
         },
       ],
       [
@@ -139,22 +141,23 @@ export class AppService {
     );
   }
 
-  private periodFinishedAction(stage: Stage) {
-    return async ({ groupId, ongoingRoundId }): Promise<void> => {
-      await this.updateNotifications({
+  private async evaluationPeriodFinishedAction({
+    groupId,
+    ongoingRoundId,
+  }): Promise<void> {
+    await this.updateNotifications({
+      groupId,
+      ongoingRoundId,
+      stage: Stage.evaluation,
+      hours: 0,
+    });
+    await this.firebase.publishMessageInTopic(
+      'gcp.pubsub.roundLifecycleControllerTopic',
+      {
         groupId,
-        ongoingRoundId,
-        stage: stage,
-        hours: 0,
-      });
-      await this.firebase.publishMessageInTopic(
-        'gcp.pubsub.roundLifecycleControllerTopic',
-        {
-          groupId,
-          roundId: ongoingRoundId,
-        },
-      );
-    };
+        roundId: ongoingRoundId,
+      },
+    );
   }
 
   private checkPeriodAboutToFinish(hours, stage: Stage) {
@@ -211,25 +214,6 @@ export class AppService {
           },
         },
       );
-    };
-  }
-
-  private checkPeriodFinished(stage: Stage) {
-    return ({
-      notifications,
-      submissionsEndAt,
-      evaluationsEndAt,
-    }: ICheckArguments) => {
-      if (
-        this.hasSameOrSubsequentNotificationBeenSent(0, stage, notifications)
-      ) {
-        return false;
-      }
-
-      const timeLimit =
-        stage === Stage.evaluation ? evaluationsEndAt : submissionsEndAt;
-      const now = this.date.current.toMillis();
-      return now > timeLimit.toMillis();
     };
   }
 
