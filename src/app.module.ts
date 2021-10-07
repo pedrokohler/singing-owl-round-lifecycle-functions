@@ -1,8 +1,7 @@
 import { Module, Logger } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AppService } from './services';
+import { ControllerService, WatcherService, ScoreService } from './services';
 import { DateTimeService, FirebaseService, Configuration } from './common';
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -10,6 +9,13 @@ import { DateTimeService, FirebaseService, Configuration } from './common';
       isGlobal: true,
     }),
   ],
-  providers: [AppService, Logger, DateTimeService, FirebaseService],
+  providers: [
+    WatcherService,
+    ControllerService,
+    ScoreService,
+    Logger,
+    DateTimeService,
+    FirebaseService,
+  ],
 })
 export class AppModule {}

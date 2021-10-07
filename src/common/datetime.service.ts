@@ -16,4 +16,22 @@ export class DateTimeService {
   get utc() {
     return DateTime.utc();
   }
+
+  public getDayOfNextWeekWithTime(dayName, hour, minute, second) {
+    const dayOfWeek = this.getDayOfTheWeek(dayName);
+    const dayOfNextWeek = this.current.plus({ week: 1 }).set({
+      weekday: dayOfWeek,
+      hour,
+      minute,
+      second,
+      millisecond: 0,
+    });
+    return dayOfNextWeek;
+  }
+  private getDayOfTheWeek(dayName) {
+    const index = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].indexOf(
+      dayName.slice(0, 3).toLowerCase(),
+    );
+    return index + 1;
+  }
 }

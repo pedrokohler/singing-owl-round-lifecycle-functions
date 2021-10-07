@@ -34,6 +34,8 @@ export class FirebaseService {
 
   public getRoundReference = this.getDocReference('rounds');
 
+  public getEvaluationsReference = this.getCollectionReference('evaluations');
+
   private getCredential(): admin.AppOptions {
     if (this.environment === 'Development') return null;
     return {
@@ -43,6 +45,14 @@ export class FirebaseService {
         clientEmail: this.configService.get('gcp.email'),
       }),
     };
+  }
+
+  get now() {
+    return admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  public generateTimestamp(dateInMilliseconds: number) {
+    return admin.firestore.Timestamp.fromMillis(dateInMilliseconds);
   }
 
   public async publishMessageInTopic(topicKeyFromEnv: string, message: any) {

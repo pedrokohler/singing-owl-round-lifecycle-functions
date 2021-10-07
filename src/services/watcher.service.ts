@@ -7,7 +7,7 @@ import IActionArguments from 'src/interfaces/action.interface';
 import IRound from 'src/interfaces/round.interface';
 
 @Injectable()
-export class AppService {
+export class WatcherService {
   private readonly checkActionMap: Map<string, ICheckAction>;
 
   constructor(
@@ -15,7 +15,7 @@ export class AppService {
     private readonly logger: Logger,
     private readonly firebase: FirebaseService,
   ) {
-    this.logger.setContext(AppService.name);
+    this.logger.setContext(WatcherService.name);
     this.checkActionMap = new Map([
       [
         'evaluationPeriodAboutToFinish(0)',
@@ -91,31 +91,60 @@ export class AppService {
   }
 
   async execute(): Promise<void> {
+    this.logger.log({
+      message: 'Starting execution of round lifecycle controller',
+    });
+
     const groupsCollection = await this.firebase.groupsCollection.get();
     await Promise.all(
       groupsCollection.docs.map(async (groupDocument) => {
         const { id: groupId } = groupDocument;
+        const ongoingRound = await this.getGroupOngoingRound(groupDocument);
         const {
           id: ongoingRoundId,
           evaluationsEndAt,
           submissionsEndAt,
           notifications,
-        } = await this.getGroupOngoingRound(groupDocument);
+        } = ongoingRound;
 
-        for (const { check, action } of this.checkActionMap.values()) {
+        this.logger.log({
+          message: 'Got ongoingRound data',
+          metadata: {
+            groupId,
+            ongoingRoundId,
+            evaluationsEndAt: evaluationsEndAt.toDate(),
+            submissionsEndAt: submissionsEndAt.toDate(),
+            notifications,
+          },
+        });
+
+        for (const [key, { check, action }] of this.checkActionMap.entries()) {
           const result = check({
             notifications,
             submissionsEndAt,
             evaluationsEndAt,
           });
+
           if (!result) {
+            this.logger.debug({
+              message: `Skipping action for ${key}`,
+            });
             continue;
           }
+
+          this.logger.debug({
+            message: `Executing action for ${key}`,
+          });
+
           return action({
             groupId,
             ongoingRoundId,
           });
         }
+
+        this.logger.log({
+          message: 'Finished executing round lifecycle watcher',
+        });
       }),
     );
   }
@@ -139,11 +168,8 @@ export class AppService {
     groupId,
     ongoingRoundId,
   }): Promise<void> {
-    await this.updateNotifications({
-      groupId,
-      ongoingRoundId,
-      stage: Stage.evaluation,
-      hours: 0,
+    this.logger.log({
+      message: 'Publishing pubsub message to the round lifecycle controller',
     });
     await this.firebase.publishMessageInTopic(
       'gcp.pubsub.roundLifecycleControllerTopic',
@@ -152,6 +178,17 @@ export class AppService {
         roundId: ongoingRoundId,
       },
     );
+    this.logger.log({
+      message:
+        'Finished publishing pubsub message to the round lifecycle controller',
+    });
+
+    await this.updateNotifications({
+      groupId,
+      ongoingRoundId,
+      stage: Stage.evaluation,
+      hours: 0,
+    });
   }
 
   private checkPeriodAboutToFinish(hours, stage: Stage) {
@@ -192,11 +229,8 @@ export class AppService {
 
   private periodAboutToFinishAction(hours, stage: Stage) {
     return async ({ groupId, ongoingRoundId }: IActionArguments) => {
-      await this.updateNotifications({
-        groupId,
-        ongoingRoundId,
-        stage,
-        hours,
+      this.logger.log({
+        message: 'Publishing pubsub message to the notification queue',
       });
       await this.firebase.publishMessageInTopic(
         'gcp.pubsub.notificationQueueTopic',
@@ -208,6 +242,16 @@ export class AppService {
           },
         },
       );
+      this.logger.log({
+        message: 'Finished publishing pubsub message to the notification queue',
+      });
+
+      await this.updateNotifications({
+        groupId,
+        ongoingRoundId,
+        stage,
+        hours,
+      });
     };
   }
 

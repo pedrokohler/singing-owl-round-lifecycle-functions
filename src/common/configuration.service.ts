@@ -13,8 +13,11 @@ export class Configuration {
         ),
         email: process.env.GCLOUD_FIREBASE_EMAIL,
         loggingLevel: process.env.GCLOUD_LOGGING_MINIMUM_LEVEL || 'info',
+        scheduler: {
+          watcherUnixCrontabSchedule:
+            process.env.GCLOUD_SCHEDULER_WATCHER_UNIX_CRONTAB_SCHEDULE,
+        },
         pubsub: {
-          unixCrontabSchedule: process.env.UNIX_CRONTAB_SCHEDULE,
           roundLifecycleControllerTopic:
             process.env.GCLOUD_PUBSUB_TOPIC_ROUND_LIFECYCLE_CONTROLLER ||
             'singing-owl-round-lifecycle-controller',
