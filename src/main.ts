@@ -26,14 +26,14 @@ class Main {
     this.timezone = envs.timezone;
   }
 
-  get scheduler() {
+  get watcher() {
     return this.builder.pubsub
       .schedule(this.unixCrontabSchedule)
       .timeZone(this.timezone)
-      .onRun(this.runService);
+      .onRun(this.runWatcherService);
   }
 
-  async runService() {
+  async runWatcherService() {
     const loggingWinston = new LoggingWinston();
     const app = await NestFactory.createApplicationContext(AppModule, {
       logger: WinstonModule.createLogger({
@@ -45,10 +45,10 @@ class Main {
     await service.execute();
   }
 
-  get mock() {
+  get watcherTriggerMock() {
     if (this.environment === 'Development') {
       return this.builder.https.onRequest(async (req, res) => {
-        await this.runService();
+        await this.runWatcherService();
         res.sendStatus(200);
       });
     }
