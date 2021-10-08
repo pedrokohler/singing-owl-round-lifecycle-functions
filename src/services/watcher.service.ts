@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+
 import ICheckArguments from 'src/interfaces/check-arguments.interface';
 import { DateTimeService, FirebaseService } from 'src/common';
 import { Stage } from 'src/enums/stage.enum';
 import ICheckAction from 'src/interfaces/check-action.interface';
 import IActionArguments from 'src/interfaces/action.interface';
 import IRound from 'src/interfaces/round.interface';
+import { NotificationTypes } from 'src/enums/notification-types.enum';
 
 @Injectable()
 export class WatcherService {
@@ -235,7 +237,7 @@ export class WatcherService {
       await this.firebase.publishMessageInTopic(
         'gcp.pubsub.notificationQueueTopic',
         {
-          type: 'periodAboutToFinish',
+          type: NotificationTypes.periodAboutToFinish,
           params: {
             hours,
             stage,

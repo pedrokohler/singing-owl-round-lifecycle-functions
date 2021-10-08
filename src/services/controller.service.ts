@@ -1,10 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
+
 import { Stage } from 'src/enums/stage.enum';
 import IHasPeriodFinishedArguments from 'src/interfaces/check-period-finished-arguments.interface';
 import IEvaluation from 'src/interfaces/evaluation.interface';
 import IGroup from 'src/interfaces/group.interface';
 import IControllerMessagePayload from 'src/interfaces/controller-message-payload.interface';
 import IRound from 'src/interfaces/round.interface';
+import { NotificationTypes } from 'src/enums/notification-types.enum';
+
 import { DateTimeService, FirebaseService } from '../common';
 import { ScoreService } from './score.service';
 
@@ -120,7 +123,7 @@ export class ControllerService {
     await this.firebase.publishMessageInTopic(
       'gcp.pubsub.notificationQueueTopic',
       {
-        type: 'evaluationPeriodFinished',
+        type: NotificationTypes.evaluationPeriodFinished,
         params: {
           winner,
           groupId,
@@ -199,7 +202,7 @@ export class ControllerService {
     await this.firebase.publishMessageInTopic(
       'gcp.pubsub.notificationQueueTopic',
       {
-        type: 'periodAboutToFinish',
+        type: NotificationTypes.periodAboutToFinish,
         params: {
           hours: 0,
           stage: Stage.submission,
