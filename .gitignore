@@ -31,3 +31,5 @@ node_modules/
 .yarn-integrity
 .env
 dumps
+env-dev.yml
+env-prod.yml

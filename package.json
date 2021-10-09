@@ -5,6 +5,8 @@
   "scripts": {
     "prebuild": "rimraf dist",
     "build": "nest build",
+    "deploy:dev": "npm run build && bash bin/deploy-development",
+    "deploy:prod": "npm run build && bash bin/deploy-production",
     "format": "prettier --write \"src/**/*.ts\" ",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "start": "npm run build && firebase emulators:start",

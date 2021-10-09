@@ -1,0 +1,23 @@
+gcloud config set project song-ballot-95754
+gcloud functions deploy singing-owl-round-lifecycle-controller \
+--region us-east1 \
+--trigger-topic singing-owl-round-lifecycle-controller \
+--runtime nodejs14 \
+--env-vars-file env-prod.yml \
+--project song-ballot-95754 \
+--max-instances 1 \
+--entry-point singingOwlRoundLifecycleController
+gcloud beta scheduler jobs create pubsub singing-owl-scheduler-round-lifecycle-watcher \
+--schedule '1 * * * *' \
+--topic=singing-owl-round-lifecycle-watcher \
+--message-body='{"zone":"us-east1"}' \
+--project=song-ballot-95754 \
+--time-zone='America/Sao_Paulo'
+gcloud functions deploy singing-owl-round-lifecycle-watcher \
+--region us-east1 \
+--trigger-topic singing-owl-round-lifecycle-watcher \
+--runtime nodejs14 \
+--env-vars-file env-prod.yml \
+--project song-ballot-95754 \
+--max-instances 1 \
+--entry-point singingOwlRoundLifecycleWatcher

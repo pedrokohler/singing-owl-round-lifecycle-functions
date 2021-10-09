@@ -206,6 +206,7 @@ export class ControllerService {
         params: {
           hours: 0,
           stage: Stage.submission,
+          groupId,
         },
       },
     );

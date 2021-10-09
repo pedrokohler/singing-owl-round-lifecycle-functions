@@ -241,6 +241,7 @@ export class WatcherService {
           params: {
             hours,
             stage,
+            groupId,
           },
         },
       );
