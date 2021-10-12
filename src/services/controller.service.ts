@@ -175,13 +175,13 @@ export class ControllerService {
     const newRound = {
       submissionsStartAt: this.firebase.now,
       submissionsEndAt: this.firebase.generateTimestamp(
-        this.date.getDayOfNextWeekWithTime('tuesday', 15, 0, 0).toMillis(),
+        this.date.getDayOfNextWeekWithTime('tuesday', 12, 0, 0).toMillis(),
       ),
       evaluationsStartAt: this.firebase.generateTimestamp(
-        this.date.getDayOfNextWeekWithTime('tuesday', 15, 0, 1).toMillis(),
+        this.date.getDayOfNextWeekWithTime('tuesday', 12, 0, 1).toMillis(),
       ),
       evaluationsEndAt: this.firebase.generateTimestamp(
-        this.date.getDayOfNextWeekWithTime('sunday', 23, 0, 0).toMillis(),
+        this.date.getDayOfNextWeekWithTime('sunday', 20, 0, 0).toMillis(),
       ),
       submissions: [],
       evaluations: [],

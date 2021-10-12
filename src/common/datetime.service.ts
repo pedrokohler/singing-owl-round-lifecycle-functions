@@ -28,6 +28,7 @@ export class DateTimeService {
     });
     return dayOfNextWeek;
   }
+
   private getDayOfTheWeek(dayName) {
     const index = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].indexOf(
       dayName.slice(0, 3).toLowerCase(),
