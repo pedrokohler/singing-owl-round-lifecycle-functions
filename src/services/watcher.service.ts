@@ -10,6 +10,7 @@ import { NotificationTypes } from 'src/enums/notification-types.enum';
 
 @Injectable()
 export class WatcherService {
+  private readonly possibleHours: number[];
   private readonly checkActionMap: Map<string, ICheckAction>;
 
   constructor(
@@ -18,77 +19,17 @@ export class WatcherService {
     private readonly firebase: FirebaseService,
   ) {
     this.logger.setContext(WatcherService.name);
+    const possibleHours = [0, 2, 8, 24];
+    this.possibleHours = possibleHours;
+
+    const evaluationCheckActionMap =
+      this.createEvaluationCheckActionMap(possibleHours);
+    const submissionCheckActionMap =
+      this.createSubmissionCheckActionMap(possibleHours);
+
     this.checkActionMap = new Map([
-      [
-        'evaluationPeriodAboutToFinish(0)',
-        {
-          check: this.checkPeriodAboutToFinish(0, Stage.evaluation).bind(this),
-          action: this.evaluationPeriodFinishedAction.bind(this),
-        },
-      ],
-      [
-        'evaluationPeriodAboutToFinish(2)',
-        {
-          check: this.checkPeriodAboutToFinish(2, Stage.evaluation).bind(this),
-          action: this.periodAboutToFinishAction(2, Stage.evaluation).bind(
-            this,
-          ),
-        },
-      ],
-      [
-        'evaluationPeriodAboutToFinish(8)',
-        {
-          check: this.checkPeriodAboutToFinish(8, Stage.evaluation).bind(this),
-          action: this.periodAboutToFinishAction(8, Stage.evaluation).bind(
-            this,
-          ),
-        },
-      ],
-      [
-        'evaluationPeriodAboutToFinish(24)',
-        {
-          check: this.checkPeriodAboutToFinish(24, Stage.evaluation).bind(this),
-          action: this.periodAboutToFinishAction(24, Stage.evaluation).bind(
-            this,
-          ),
-        },
-      ],
-      [
-        'submissionPeriodAboutToFinish(0)',
-        {
-          check: this.checkPeriodAboutToFinish(0, Stage.submission).bind(this),
-          action: this.periodAboutToFinishAction(0, Stage.submission).bind(
-            this,
-          ),
-        },
-      ],
-      [
-        'submissionPeriodAboutToFinish(2)',
-        {
-          check: this.checkPeriodAboutToFinish(2, Stage.submission).bind(this),
-          action: this.periodAboutToFinishAction(2, Stage.submission).bind(
-            this,
-          ),
-        },
-      ],
-      [
-        'submissionPeriodAboutToFinish(8)',
-        {
-          check: this.checkPeriodAboutToFinish(8, Stage.submission).bind(this),
-          action: this.periodAboutToFinishAction(8, Stage.submission).bind(
-            this,
-          ),
-        },
-      ],
-      [
-        'submissionPeriodAboutToFinish(24)',
-        {
-          check: this.checkPeriodAboutToFinish(24, Stage.submission).bind(this),
-          action: this.periodAboutToFinishAction(24, Stage.submission).bind(
-            this,
-          ),
-        },
-      ],
+      ...evaluationCheckActionMap,
+      ...submissionCheckActionMap,
     ]);
   }
 
@@ -100,55 +41,52 @@ export class WatcherService {
     const groupsCollection = await this.firebase.groupsCollection.get();
     await Promise.all(
       groupsCollection.docs.map(async (groupDocument) => {
-        const { id: groupId } = groupDocument;
+        const { id } = groupDocument;
         const ongoingRound = await this.getGroupOngoingRound(groupDocument);
-        const {
-          id: ongoingRoundId,
-          evaluationsEndAt,
-          submissionsEndAt,
-          notifications,
-        } = ongoingRound;
-
-        this.logger.log({
-          message: 'Got ongoingRound data',
-          metadata: {
-            groupId,
-            ongoingRoundId,
-            evaluationsEndAt: evaluationsEndAt.toDate(),
-            submissionsEndAt: submissionsEndAt.toDate(),
-            notifications,
-          },
-        });
-
-        for (const [key, { check, action }] of this.checkActionMap.entries()) {
-          const result = check({
-            notifications,
-            submissionsEndAt,
-            evaluationsEndAt,
-          });
-
-          if (!result) {
-            this.logger.debug({
-              message: `Skipping action for ${key}`,
-            });
-            continue;
-          }
-
-          this.logger.debug({
-            message: `Executing action for ${key}`,
-          });
-
-          return action({
-            groupId,
-            ongoingRoundId,
-          });
-        }
-
-        this.logger.log({
-          message: 'Finished executing round lifecycle watcher',
-        });
+        return this.doChecksAndMaybeRunAction(id, ongoingRound);
       }),
     );
+
+    this.logger.log({
+      message: 'Finished executing round lifecycle watcher',
+    });
+  }
+
+  private doChecksAndMaybeRunAction(
+    groupId: string,
+    round: IRound,
+  ): Promise<void> {
+    const {
+      notifications,
+      submissionsEndAt,
+      evaluationsEndAt,
+      id: roundId,
+    } = round;
+
+    for (const [key, { check, action }] of this.checkActionMap.entries()) {
+      const result = check({
+        notifications,
+        submissionsEndAt,
+        evaluationsEndAt,
+      });
+
+      if (!result) {
+        this.logger.debug({
+          message: `Skipping action for ${key}`,
+        });
+        continue;
+      }
+
+      this.logger.debug({
+        message: `Executing action for ${key}`,
+      });
+      return action({
+        groupId,
+        roundId,
+      });
+    }
+
+    return Promise.resolve();
   }
 
   private async getGroupOngoingRound(groupDocument): Promise<IRound> {
@@ -158,18 +96,31 @@ export class WatcherService {
       .getRoundReference(groupId, ongoingRoundId)
       .get();
 
-    const group = {
+    const round = {
       ...roundReference.data(),
       id: roundReference.id,
     } as IRound;
 
-    return group;
+    const { evaluationsEndAt, submissionsEndAt, notifications } = round;
+
+    this.logger.log({
+      message: 'Got ongoingRound data',
+      metadata: {
+        groupId,
+        ongoingRoundId,
+        evaluationsEndAt: evaluationsEndAt.toDate(),
+        submissionsEndAt: submissionsEndAt.toDate(),
+        notifications,
+      },
+    });
+
+    return round;
   }
 
   private async evaluationPeriodFinishedAction({
     groupId,
-    ongoingRoundId,
-  }): Promise<void> {
+    roundId,
+  }: IActionArguments): Promise<void> {
     this.logger.log({
       message: 'Publishing pubsub message to the round lifecycle controller',
     });
@@ -177,7 +128,7 @@ export class WatcherService {
       'gcp.pubsub.roundLifecycleControllerTopic',
       {
         groupId,
-        roundId: ongoingRoundId,
+        roundId,
       },
     );
     this.logger.log({
@@ -187,7 +138,7 @@ export class WatcherService {
 
     await this.updateNotifications({
       groupId,
-      ongoingRoundId,
+      roundId,
       stage: Stage.evaluation,
       hours: 0,
     });
@@ -222,15 +173,40 @@ export class WatcherService {
       return false;
     }
 
-    const possibleHours = [24, 8, 2, 0];
-    const laterNotificationSent = possibleHours
+    const wasSubsequentNotificationSent = this.getAllSubsequentNotificationTags(
+      hours,
+      stage,
+    ).some((tag) => notifications[tag]);
+
+    return wasSubsequentNotificationSent;
+  }
+
+  private getAllSubsequentNotificationTags(hours, stage) {
+    if (stage === Stage.evaluation) {
+      return this.getSubsequentNotificationTagsOfSameType(hours, stage);
+    }
+
+    const allEvaluationNotificationTags = this.possibleHours.map((hour) =>
+      this.getNotificationTag(Stage.evaluation, hour),
+    );
+
+    const subsequentSubmissionNotificationTags =
+      this.getSubsequentNotificationTagsOfSameType(hours, stage);
+
+    return [
+      ...allEvaluationNotificationTags,
+      ...subsequentSubmissionNotificationTags,
+    ];
+  }
+
+  private getSubsequentNotificationTagsOfSameType(hours, stage) {
+    return this.possibleHours
       .filter((hour) => hour <= hours)
-      .some((hour) => notifications[this.getNotificationTag(stage, hour)]);
-    return laterNotificationSent;
+      .map((hour) => this.getNotificationTag(stage, hour));
   }
 
   private periodAboutToFinishAction(hours, stage: Stage) {
-    return async ({ groupId, ongoingRoundId }: IActionArguments) => {
+    return async ({ groupId, roundId }: IActionArguments): Promise<void> => {
       this.logger.log({
         message: 'Publishing pubsub message to the notification queue',
       });
@@ -251,15 +227,51 @@ export class WatcherService {
 
       await this.updateNotifications({
         groupId,
-        ongoingRoundId,
+        roundId,
         stage,
         hours,
       });
     };
   }
 
-  private async updateNotifications({ groupId, ongoingRoundId, stage, hours }) {
-    await this.firebase.getRoundReference(groupId, ongoingRoundId).update({
+  private createEvaluationCheckActionMap(possibleHours: number[]) {
+    const nonZeroHours = possibleHours.filter((hour) => hour !== 0);
+    const checkActions = nonZeroHours.map<[string, ICheckAction]>((hour) =>
+      this.createCheckActionPayload(Stage.evaluation, hour),
+    );
+
+    return new Map([
+      [
+        'evaluationPeriodAboutToFinish(0)',
+        {
+          check: this.checkPeriodAboutToFinish(0, Stage.evaluation).bind(this),
+          action: this.evaluationPeriodFinishedAction.bind(this),
+        },
+      ],
+      ...checkActions,
+    ]);
+  }
+
+  private createSubmissionCheckActionMap(possibleHours: number[]) {
+    const checkActions = possibleHours.map<[string, ICheckAction]>((hour) =>
+      this.createCheckActionPayload(Stage.submission, hour),
+    );
+
+    return new Map([...checkActions]);
+  }
+
+  private createCheckActionPayload(stage: Stage, hour): [string, ICheckAction] {
+    return [
+      `${stage}PeriodAboutToFinish(${hour})`,
+      {
+        check: this.checkPeriodAboutToFinish(hour, stage).bind(this),
+        action: this.periodAboutToFinishAction(hour, stage).bind(this),
+      },
+    ];
+  }
+
+  private async updateNotifications({ groupId, roundId, stage, hours }) {
+    await this.firebase.getRoundReference(groupId, roundId).update({
       [`notifications.${this.getNotificationTag(stage, hours)}`]: true,
     });
   }

@@ -25,7 +25,7 @@ export class ScoreService {
     >(this.computeSubmissionResult.bind(this), []);
 
     const sortedResults = results.sort(this.rankSubmissions.bind(this));
-    return sortedResults?.[0].userId;
+    return sortedResults?.[0]?.userId;
   }
 
   private groupEvaluations(
