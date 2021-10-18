@@ -156,13 +156,13 @@ export class ControllerService {
   private startNewRound = async (groupId, lastWinner) => {
     const groupReference = this.firebase.getGroupReference(groupId);
 
-    const group = await groupReference.get();
-    const { users } = group.data();
+    const groupDocument = await groupReference.get();
+    const group = groupDocument.data() as IGroup;
 
     const round = await groupReference.collection('rounds').add(
       this.generateNewRoundPayload({
-        users,
         lastWinner,
+        group,
       }),
     );
 
@@ -171,17 +171,50 @@ export class ControllerService {
     });
   };
 
-  private generateNewRoundPayload = ({ users, lastWinner }) => {
+  private generateNewRoundPayload = ({
+    lastWinner,
+    group,
+  }: {
+    group: IGroup;
+    lastWinner: string;
+  }) => {
+    const {
+      settings: {
+        rounds: { evaluationsEndAt, evaluationsStartAt, submissionsEndAt },
+      },
+      users,
+    } = group;
     const newRound = {
       submissionsStartAt: this.firebase.now,
       submissionsEndAt: this.firebase.generateTimestamp(
-        this.date.getDayOfNextWeekWithTime('tuesday', 12, 0, 0).toMillis(),
+        this.date
+          .getDayOfNextWeekWithTime(
+            submissionsEndAt.weekDay,
+            submissionsEndAt.hour,
+            submissionsEndAt.minute,
+            submissionsEndAt.second,
+          )
+          .toMillis(),
       ),
       evaluationsStartAt: this.firebase.generateTimestamp(
-        this.date.getDayOfNextWeekWithTime('tuesday', 12, 0, 1).toMillis(),
+        this.date
+          .getDayOfNextWeekWithTime(
+            evaluationsStartAt.weekDay,
+            evaluationsStartAt.hour,
+            evaluationsStartAt.minute,
+            evaluationsStartAt.second,
+          )
+          .toMillis(),
       ),
       evaluationsEndAt: this.firebase.generateTimestamp(
-        this.date.getDayOfNextWeekWithTime('sunday', 20, 0, 0).toMillis(),
+        this.date
+          .getDayOfNextWeekWithTime(
+            evaluationsEndAt.weekDay,
+            evaluationsEndAt.hour,
+            evaluationsEndAt.minute,
+            evaluationsEndAt.second,
+          )
+          .toMillis(),
       ),
       submissions: [],
       evaluations: [],
