@@ -1,4 +1,5 @@
 import { firestore } from 'firebase-admin';
+import { Stage } from 'src/enums/stage.enum';
 import IGenericRegularObject from './generic-regular-object.interface';
 
 export default interface IRound {
@@ -14,4 +15,5 @@ export default interface IRound {
   evaluationsStartAt: firestore.Timestamp;
   submissionsEndAt: firestore.Timestamp;
   submissionsStartAt: firestore.Timestamp;
+  currentStage: Stage;
 }

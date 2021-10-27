@@ -70,16 +70,25 @@ export class ControllerService {
       },
     });
 
+    if (this.shouldFinishRound(round)) {
+      return await this.finishRound(groupId, roundId);
+    }
+
+    if (this.shouldForceStartEvaluationPeriod(round)) {
+      return await this.forceStartEvaluationPeriod(groupId, roundId);
+    }
+  }
+
+  private shouldFinishRound(round: IRound): boolean {
     const hasEvaluationPeriodFinished = this.hasPeriodFinished({
       stage: Stage.evaluation,
       evaluationsEndAt: round.evaluationsEndAt,
     });
-    const hasSubmissionPeriodFinished = this.hasPeriodFinished({
-      stage: Stage.submission,
-      submissionsEndAt: round.submissionsEndAt,
-    });
 
-    if (hasEvaluationPeriodFinished || this.hasEveryoneVoted(round)) {
+    const shouldFinishRound =
+      hasEvaluationPeriodFinished || this.hasEveryoneVoted(round);
+
+    if (shouldFinishRound) {
       this.logger.debug({
         message: 'End of round has been reached. Starting to finish round.',
         metadata: {
@@ -87,23 +96,42 @@ export class ControllerService {
           hasEveryoneVoted: this.hasEveryoneVoted(round),
         },
       });
-      return await this.finishRound(groupId, roundId);
+      return true;
     }
 
-    if (
-      hasSubmissionPeriodFinished === false &&
-      this.hasEveryoneSubmittedAllSongs(round)
-    ) {
+    return false;
+  }
+
+  private shouldForceStartEvaluationPeriod(round: IRound): boolean {
+    const { currentStage } = round;
+    const hasSubmissionStage = currentStage === Stage.submission;
+
+    const hasSubmissionPeriodFinished = this.hasPeriodFinished({
+      stage: Stage.submission,
+      submissionsEndAt: round.submissionsEndAt,
+    });
+
+    const hasEveryoneSubmittedAllSongs =
+      this.hasEveryoneSubmittedAllSongs(round);
+
+    const shouldForceStartEvaluationPeriod =
+      (hasSubmissionPeriodFinished === false && hasEveryoneSubmittedAllSongs) ||
+      (hasSubmissionPeriodFinished === true && hasSubmissionStage);
+
+    if (shouldForceStartEvaluationPeriod) {
       this.logger.debug({
         message:
-          'End of submission period has been reached. Starting to force the beginning of the evaluation period.',
+          'End of submission period has been reached. Forcing the beginning of the evaluation period.',
         metadata: {
           hasSubmissionPeriodFinished,
-          hasEveryoneSubmitted: this.hasEveryoneSubmittedAllSongs(round),
+          hasEveryoneSubmitted: hasEveryoneSubmittedAllSongs,
         },
       });
-      return await this.forceStartEvaluationPeriod(groupId, roundId);
+
+      return true;
     }
+
+    return false;
   }
 
   private hasEveryoneVoted(round: IRound) {
@@ -221,6 +249,7 @@ export class ControllerService {
       songs: [],
       users: users || [],
       voteCount: 0,
+      currentStage: Stage.submission,
     };
     return lastWinner ? { ...newRound, lastWinner } : newRound;
   };
@@ -231,6 +260,7 @@ export class ControllerService {
     await roundReference.update({
       submissionsEndAt: now,
       evaluationsStartAt: now,
+      currentStage: Stage.evaluation,
     });
     await this.firebase.publishMessageInTopic(
       'gcp.pubsub.notificationQueueTopic',

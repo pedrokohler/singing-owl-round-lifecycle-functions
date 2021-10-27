@@ -22,10 +22,14 @@ export class WatcherService {
     const possibleHours = [0, 2, 8, 24];
     this.possibleHours = possibleHours;
 
-    const evaluationCheckActionMap =
-      this.createEvaluationCheckActionMap(possibleHours);
-    const submissionCheckActionMap =
-      this.createSubmissionCheckActionMap(possibleHours);
+    const evaluationCheckActionMap = this.createStageCheckActionMap(
+      Stage.evaluation,
+      possibleHours,
+    );
+    const submissionCheckActionMap = this.createStageCheckActionMap(
+      Stage.submission,
+      possibleHours,
+    );
 
     this.checkActionMap = new Map([
       ...evaluationCheckActionMap,
@@ -57,6 +61,7 @@ export class WatcherService {
     round: IRound,
   ): Promise<void> {
     const {
+      currentStage,
       notifications,
       submissionsEndAt,
       evaluationsEndAt,
@@ -65,6 +70,7 @@ export class WatcherService {
 
     for (const [key, { check, action }] of this.checkActionMap.entries()) {
       const result = check({
+        currentRoundStage: currentStage,
         notifications,
         submissionsEndAt,
         evaluationsEndAt,
@@ -117,51 +123,55 @@ export class WatcherService {
     return round;
   }
 
-  private async evaluationPeriodFinishedAction({
-    groupId,
-    roundId,
-  }: IActionArguments): Promise<void> {
-    this.logger.log({
-      message: 'Publishing pubsub message to the round lifecycle controller',
-    });
-    await this.firebase.publishMessageInTopic(
-      'gcp.pubsub.roundLifecycleControllerTopic',
-      {
+  private periodFinishedAction(stage: Stage) {
+    return async ({ groupId, roundId }: IActionArguments): Promise<void> => {
+      this.logger.log({
+        message: 'Publishing pubsub message to the round lifecycle controller',
+      });
+      await this.firebase.publishMessageInTopic(
+        'gcp.pubsub.roundLifecycleControllerTopic',
+        {
+          groupId,
+          roundId,
+        },
+      );
+      this.logger.log({
+        message:
+          'Finished publishing pubsub message to the round lifecycle controller',
+      });
+
+      await this.updateNotifications({
         groupId,
         roundId,
-      },
-    );
-    this.logger.log({
-      message:
-        'Finished publishing pubsub message to the round lifecycle controller',
-    });
-
-    await this.updateNotifications({
-      groupId,
-      roundId,
-      stage: Stage.evaluation,
-      hours: 0,
-    });
+        stage,
+        hours: 0,
+      });
+    };
   }
 
   private checkPeriodAboutToFinish(hours, stage: Stage) {
     return ({
+      currentRoundStage,
       notifications,
       evaluationsEndAt,
       submissionsEndAt,
     }: ICheckArguments) => {
+      const isEvaluation = stage === Stage.evaluation;
+      const isLaterRoundStage =
+        currentRoundStage === Stage.evaluation && !isEvaluation;
+
       if (
         this.hasSameOrSubsequentNotificationBeenSent(
           hours,
           stage,
           notifications,
-        )
+        ) ||
+        isLaterRoundStage
       ) {
         return false;
       }
 
-      const timeLimit =
-        stage === Stage.evaluation ? evaluationsEndAt : submissionsEndAt;
+      const timeLimit = isEvaluation ? evaluationsEndAt : submissionsEndAt;
       const now = this.date.current.toMillis();
       const hoursInMilliseconds = hours * 60 * 60 * 1000;
       return now > timeLimit.toMillis() - hoursInMilliseconds;
@@ -234,30 +244,22 @@ export class WatcherService {
     };
   }
 
-  private createEvaluationCheckActionMap(possibleHours: number[]) {
+  private createStageCheckActionMap(stage: Stage, possibleHours: number[]) {
     const nonZeroHours = possibleHours.filter((hour) => hour !== 0);
     const checkActions = nonZeroHours.map<[string, ICheckAction]>((hour) =>
-      this.createCheckActionPayload(Stage.evaluation, hour),
+      this.createCheckActionPayload(stage, hour),
     );
 
     return new Map([
       [
-        'evaluationPeriodAboutToFinish(0)',
+        `${stage}PeriodAboutToFinish(0)`,
         {
-          check: this.checkPeriodAboutToFinish(0, Stage.evaluation).bind(this),
-          action: this.evaluationPeriodFinishedAction.bind(this),
+          check: this.checkPeriodAboutToFinish(0, stage).bind(this),
+          action: this.periodFinishedAction(stage).bind(this),
         },
       ],
       ...checkActions,
     ]);
-  }
-
-  private createSubmissionCheckActionMap(possibleHours: number[]) {
-    const checkActions = possibleHours.map<[string, ICheckAction]>((hour) =>
-      this.createCheckActionPayload(Stage.submission, hour),
-    );
-
-    return new Map([...checkActions]);
   }
 
   private createCheckActionPayload(stage: Stage, hour): [string, ICheckAction] {
